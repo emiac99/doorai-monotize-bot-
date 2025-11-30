@@ -26,7 +26,7 @@ if not TELEGRAM_TOKEN:
 
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
-application = ApplicationBuilder().token(BOT_TOKEN).build()
+application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 DB_PATH = os.getenv("DB_PATH", "bot.db")
 LAST_RESET_FILE = os.getenv("LAST_RESET_FILE", "last_reset.txt")
