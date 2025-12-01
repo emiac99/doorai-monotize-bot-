@@ -15,11 +15,11 @@ from telegram.ext import (
 
 # --------- CONFIG (env vars; defaults provided) ----------
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")                     # <-- set this on Render (your bot token)
-ADMIN_ID = int(os.getenv("ADMIN_ID", "8001485394"))    # you gave 8001485394
+ADMIN_IDS = int(os.getenv("ADMIN_IDS", "8001485394"))    # you gave 8001485394
 DOMAIN = os.getenv("DOMAIN", "https://doorai-monotize-bot.onrender.com")
-SHRINK_API_KEY = os.getenv("SHRINK_API_KEY", "")       # set your ShrinkMe API key in Render
-REFERRAL_QUALIFY_CLICKS = int(os.getenv("REFERRAL_QUALIFY_CLICKS", "20"))
-DAILY_RESET_HOUR_UTC = int(os.getenv("DAILY_RESET_HOUR_UTC", "0"))  # not strictly used; reset checks date change
+SHRINK_LINK = os.getenv("SHRINK_LINK", "")       # set your ShrinkMe API key in Render
+REFERRAL_CLICKS_PER_DAY = int(os.getenv("REFERRAL_CLICKS_PER_DAY", "20"))
+DAILY_REPORT_HOUR = int(os.getenv("DAILY_REPORT_HOUR", "5_UTC"))  # not strictly used; reset checks date change
 
 if not TELEGRAM_TOKEN:
     raise RuntimeError("TELEGRAM_TOKEN environment variable is required")
@@ -172,7 +172,7 @@ def record_click_via_redirect(user_id, ip_hash, ua_hash):
             # compute total clicks for referee (ALL time)
             c.execute("SELECT COUNT(*) FROM clicks WHERE user_id=?", (user_id,))
             total = c.fetchone()[0]
-            if total >= REFERRAL_QUALIFY_CLICKS:
+            if total >= REFERRAL_CLICKS_PER_DAY:
                 # mark referral qualified and increment referrer's qualified_referrals
                 c.execute("UPDATE referrals SET qualified=1 WHERE referee=?", (user_id,))
                 c.execute("UPDATE users SET qualified_referrals = qualified_referrals + 1 WHERE user_id=?", (referrer,))
@@ -234,7 +234,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Welcome! Tap buttons below to get your monetized link, view progress, or see referrals.", reply_markup=InlineKeyboardMarkup(kb))
 
 async def cmd_setshrinkme(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_IDS:
         return await update.message.reply_text("Only admin can set ShrinkMe link.")
     if not context.args:
         return await update.message.reply_text("Usage: /setshrinkme <shrinkme_url>")
@@ -243,7 +243,7 @@ async def cmd_setshrinkme(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("ShrinkMe link saved.")
 
 async def cmd_qualified_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_IDS:
         return await update.message.reply_text("Only admin.")
     conn = db_conn(); c = conn.cursor()
     c.execute("SELECT user_id, COUNT(*) as clicks FROM clicks WHERE click_date=? GROUP BY user_id HAVING clicks>=?", (today_str(), REFERRAL_QUALIFY_CLICKS))
@@ -254,7 +254,7 @@ async def cmd_qualified_today(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("Qualified today:\n" + "\n".join(lines))
 
 async def cmd_referral_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_IDS:
         return await update.message.reply_text("Only admin.")
     conn = db_conn(); c = conn.cursor()
     c.execute("SELECT user_id, qualified_referrals FROM users ORDER BY qualified_referrals DESC LIMIT 20")
@@ -322,7 +322,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         c.execute("SELECT COUNT(*) FROM clicks WHERE user_id=? AND click_date=?", (uid, today_str()))
         today_count = c.fetchone()[0]
         conn.close()
-        remaining = max(0, REFERRAL_QUALIFY_CLICKS - today_count)
+        remaining = max(0, REFERRAL_CLICKS_PER_DAY - today_count)
         await q.edit_message_text(f"Today's clicks: {today_count}/{REFERRAL_QUALIFY_CLICKS}. {remaining} to go today.")
 
     # ADMIN PANEL
@@ -339,7 +339,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ADMIN: all users
     elif q.data == "admin_all_users":
-        if uid != ADMIN_ID:
+        if uid != ADMIN_IDS:
             await q.edit_message_text("Only admin.")
             return
         conn = db_conn(); c = conn.cursor()
@@ -352,7 +352,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ADMIN: qualified today
     elif q.data == "admin_qualified_today":
-        if uid != ADMIN_ID:
+        if uid != ADMIN_IDS:
             await q.edit_message_text("Only admin.")
             return
         conn = db_conn(); c = conn.cursor()
@@ -368,7 +368,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ADMIN: referral details
     elif q.data == "admin_ref_details":
-        if uid != ADMIN_ID:
+        if uid != ADMIN_IDS:
             await q.edit_message_text("Only admin.")
             return
         conn = db_conn(); c = conn.cursor()
